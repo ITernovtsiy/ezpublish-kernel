@@ -30,7 +30,7 @@ use Exception;
 class TrashService implements TrashServiceInterface
 {
     /**
-     * @var \eZ\Publish\API\Repository\Repository
+     * @var \eZ\Publish\API\Repository\Repository|\eZ\Publish\Core\Repository\Repository
      */
     protected $repository;
 
@@ -130,9 +130,18 @@ class TrashService implements TrashServiceInterface
             throw $e;
         }
 
-        return isset($spiTrashItem)
-            ? $this->buildDomainTrashItemObject($spiTrashItem)
-            : null;
+        // Use sudo as we want a trash item regardless of user access to the trash.
+        try {
+            return isset($spiTrashItem)
+                ? $this->repository->sudo(
+                    function () use ($spiTrashItem) {
+                        return $this->buildDomainTrashItemObject($spiTrashItem);
+                    }
+                )
+                : null;
+        } catch (Exception $e) {
+            return null;
+        }
     }
 
     /**
