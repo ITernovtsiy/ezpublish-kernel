@@ -8,6 +8,7 @@
  */
 namespace eZ\Publish\Core\MVC\Symfony\Cache\Http\SignalSlot;
 
+use eZ\Publish\API\Repository\Repository as RepositoryInterface;
 use eZ\Publish\Core\MVC\Symfony\Cache\GatewayCachePurger;
 use eZ\Publish\Core\SignalSlot\Signal;
 use eZ\Publish\Core\SignalSlot\Slot;
@@ -23,11 +24,18 @@ abstract class HttpCacheSlot extends Slot
     protected $httpCacheClearer;
 
     /**
-     * @param \eZ\Publish\Core\MVC\Symfony\Cache\GatewayCachePurger $httpCacheClearer
+     * @var \eZ\Publish\API\Repository\Repository|\eZ\Publish\Core\Repository\Repository
      */
-    public function __construct(GatewayCachePurger $httpCacheClearer)
+    protected $repository;
+
+    /**
+     * @param \eZ\Publish\Core\MVC\Symfony\Cache\GatewayCachePurger $httpCacheClearer
+     * @param \eZ\Publish\API\Repository\Repository $repository
+     */
+    public function __construct(GatewayCachePurger $httpCacheClearer, RepositoryInterface $repository)
     {
         $this->httpCacheClearer = $httpCacheClearer;
+        $this->repository = $repository;
     }
 
     public function receive(Signal $signal)
@@ -36,7 +44,12 @@ abstract class HttpCacheSlot extends Slot
             return;
         }
 
-        $this->purgeHttpCache($signal);
+        // Use sudo as cache clearing should happen regardless of user permissions.
+        $this->repository->sudo(
+            function () use ($signal) {
+                $this->purgeHttpCache($signal);
+            }
+        );
     }
 
     /**

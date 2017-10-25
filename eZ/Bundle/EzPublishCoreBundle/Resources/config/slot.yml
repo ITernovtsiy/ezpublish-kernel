@@ -23,7 +23,9 @@ services:
     ezpublish.http_cache.signalslot.http_cache:
         abstract: true
         class: "%ezpublish.http_cache.signalslot.http_cache.class%"
-        arguments: ["@ezpublish.http_cache.purger"]
+        arguments:
+            - "@ezpublish.http_cache.purger"
+            - "@ezpublish.api.repository"
 
     ezpublish.http_cache.signalslot.assign_section:
         class: "%ezpublish.http_cache.signalslot.assign_section.class%"
