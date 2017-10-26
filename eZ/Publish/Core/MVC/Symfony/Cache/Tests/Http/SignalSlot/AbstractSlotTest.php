@@ -8,6 +8,12 @@
  */
 namespace eZ\Publish\Core\MVC\Symfony\Cache\Tests\Http\SignalSlot;
 
+use eZ\Publish\Core\Repository\Helper\LimitationService;
+use eZ\Publish\Core\Repository\Helper\RoleDomainMapper;
+use eZ\Publish\Core\Repository\Permission\PermissionResolver;
+use eZ\Publish\Core\Repository\Repository;
+use eZ\Publish\API\Repository\Values\User\UserReference;
+use eZ\Publish\SPI\Persistence\User\Handler as UserHandler;
 use PHPUnit\Framework\TestCase;
 
 abstract class AbstractSlotTest extends TestCase implements SlotTest
@@ -18,6 +24,9 @@ abstract class AbstractSlotTest extends TestCase implements SlotTest
     /** @var \eZ\Publish\Core\MVC\Symfony\Cache\GatewayCachePurger|\PHPUnit_Framework_MockObject_MockObject */
     protected $cachePurgerMock;
 
+    /** @var \eZ\Publish\Core\Repository\Repository|\PHPUnit_Framework_MockObject_MockObject */
+    protected $repositoryMock;
+
     private $contentId = 42;
 
     private static $signal;
@@ -25,6 +34,22 @@ abstract class AbstractSlotTest extends TestCase implements SlotTest
     public function setUp()
     {
         $this->cachePurgerMock = $this->getMock('eZ\Publish\Core\MVC\Symfony\Cache\GatewayCachePurger');
+        $this->repositoryMock = $this
+            ->getMockBuilder(Repository::class)
+            ->disableOriginalConstructor()
+            ->setMethods(
+                array_diff(
+                    get_class_methods(Repository::class),
+                    array('sudo')
+                )
+            )
+            ->getMock();
+
+        $this->repositoryMock
+            ->expects($this->any())
+            ->method('getPermissionResolver')
+            ->will($this->returnValue($this->getPermissionResolverMock()));
+
         $this->slot = $this->createSlot();
         self::$signal = $this->createSignal();
     }
@@ -33,7 +58,7 @@ abstract class AbstractSlotTest extends TestCase implements SlotTest
     {
         $class = $this->getSlotClass();
 
-        return new $class($this->cachePurgerMock);
+        return new $class($this->cachePurgerMock, $this->repositoryMock);
     }
 
     /**
@@ -42,6 +67,34 @@ abstract class AbstractSlotTest extends TestCase implements SlotTest
     protected function getCachePurger()
     {
         return $this->cachePurgerMock;
+    }
+
+    /**
+     * @return \eZ\Publish\Core\Repository\Permission\PermissionResolver|\PHPUnit_Framework_MockObject_MockObject
+     */
+    private function getPermissionResolverMock()
+    {
+        return $this
+            ->getMockBuilder(PermissionResolver::class)
+            ->setMethods(null)
+            ->setConstructorArgs(
+                [
+                    $this
+                        ->getMockBuilder(RoleDomainMapper::class)
+                        ->disableOriginalConstructor()
+                        ->getMock(),
+                    $this
+                        ->getMockBuilder(LimitationService::class)
+                        ->getMock(),
+                    $this
+                        ->getMockBuilder(UserHandler::class)
+                        ->getMock(),
+                    $this
+                        ->getMockBuilder(UserReference::class)
+                        ->getMock(),
+                ]
+            )
+            ->getMock();
     }
 
     /**
