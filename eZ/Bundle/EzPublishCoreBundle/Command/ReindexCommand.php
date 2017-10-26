@@ -9,15 +9,18 @@
 namespace eZ\Bundle\EzPublishCoreBundle\Command;
 
 use eZ\Publish\Core\Search\Common\IterativelyIndexer;
+use eZ\Publish\SPI\Persistence\Content\ContentInfo;
+use eZ\Publish\Core\Search\Common\Indexer;
+use Doctrine\DBAL\Driver\Statement;
 use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\PhpExecutableFinder;
-use eZ\Publish\Core\Search\Common\Indexer;
-use ezcSystemInfo;
 use RuntimeException;
+use DateTime;
+use PDO;
 
 class ReindexCommand extends ContainerAwareCommand
 {
@@ -80,34 +83,114 @@ EOT
         }
 
 
-        if ($this->searchIndexer instanceof IterativelyIndexer) {
-            return $this->executeParallel($input, $output, (int) $iterationCount, (bool) $noCommit);
-        }
-
-        $output->writeln( <<<EOT
+        if (!$this->searchIndexer instanceof IterativelyIndexer) {
+            $output->writeln( <<<EOT
 DEPRECATED:
-Running indexing against an Indexer that has not been updated to use IterativelyIndexer abstract, options that won't be
-taken into account:
+Running indexing against an Indexer that has not been updated to use IterativelyIndexer abstract.
+
+Options that won't be taken into account:
 - since
 - content-ids
 - processes
 - no-purge
 EOT
-        );
-        $this->searchIndexer->createSearchIndex($output, (int) $iterationCount, empty($noCommit));
+            );
+            $this->searchIndexer->createSearchIndex($output, (int) $iterationCount, empty($noCommit));
+
+            return 0;
+        }
+
+        // If content-ids are specified we assume we are in a sub process or that it's not needed
+        if ($contentIds = $input->getOption('content-ids')) {
+            $this->searchIndexer->updateSearchIndex($contentIds);
+        }
+
+        return $this->executeParallel($input, $output, (int) $iterationCount, (bool) $noCommit);
     }
 
 
-    private function executeParallel(InputInterface $input, OutputInterface $output, $iterationCount, $noCommit) {
+    private function executeParallel(InputInterface $input, OutputInterface $output, $iterationCount, $noCommit)
+    {
         $since = $input->getOption('since');
-        $contentIds = $input->getOption('content-ids');
         $processes = $input->getOption('processes');
         $noPurge = $input->getOption('no-purge');
 
+        if ($since) {
+            $stmt = $this->getStatementContentSince(new DateTime($since));
+        } else {
+            $stmt = $this->getStatementContentAll();
+        }
+
 
     }
 
+    /**
+     * @param DateTime $since
+     *
+     * @return \Doctrine\DBAL\Driver\Statement
+     */
+    private function getStatementContentSince(DateTime $since)
+    {
+        /**
+         * @var \Doctrine\DBAL\Connection $connection
+         */
+        $connection = $this->getContainer()->get('ezpublish.api.storage_engine.legacy.connection');
+        $q = $connection->createQueryBuilder()
+            ->select('c.id')
+            ->from('ezcontentobject', 'c')
+            ->where('c.status = :status')->andWhere('c.modified >= :since')
+            ->orderBy('c.modified', true)
+            ->setParameter('status', ContentInfo::STATUS_PUBLISHED, PDO::PARAM_INT)
+            ->setParameter('since', $since->getTimestamp(), PDO::PARAM_INT);
 
+        return $q->execute();
+    }
+
+    /**
+     * @return \Doctrine\DBAL\Driver\Statement
+     */
+    private function getStatementContentAll()
+    {
+        /**
+         * @var \Doctrine\DBAL\Connection $connection
+         */
+        $connection = $this->getContainer()->get('ezpublish.api.storage_engine.legacy.connection');
+        $q = $connection->createQueryBuilder()
+            ->select('c.id')
+            ->from('ezcontentobject', 'c')
+            ->where('c.status = :status')
+            ->setParameter('status', ContentInfo::STATUS_PUBLISHED, PDO::PARAM_INT);
+
+        return $q->execute();
+    }
+
+    /**
+     * @param \Doctrine\DBAL\Driver\Statement $stmt
+     * @param int $iterationCount
+     *
+     * @return int[][] Return an array of arrays, each array contains content id's of $iterationCount.
+     */
+    private function fetchIteration(Statement $stmt, $iterationCount)
+    {
+        do {
+            $contentIds = [];
+            for ($i = 0; $i < $iterationCount; ++$i) {
+                if ($contentId = $stmt->fetch(PDO::FETCH_COLUMN)) {
+                    $contentIds[] = $contentId;
+                } else {
+                    break;
+                }
+            }
+
+            yield $contentIds;
+        } while ($contentId);
+    }
+
+    /**
+     * @param string $consoleDir
+     *
+     * @return Process
+     */
     private static function getPhpProcess($consoleDir = 'app')
     {
         $phpFinder = new PhpExecutableFinder();
@@ -122,6 +205,9 @@ EOT
         return new Process($php.' '.$console.' '.$cmd, null, null, null, null);
     }
 
+    /**
+     * @return int
+     */
     private function getNumberOfCPUCores()
     {
         $cores = 1;
