@@ -32,91 +32,109 @@ class URLServiceTest extends BaseURLServiceTest
                 'name' => 'Twitter',
                 'url' => 'http://twitter.com/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Facebook',
                 'url' => 'http://www.facebook.com/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Google',
                 'url' => 'http://www.google.com/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Vimeo',
                 'url' => 'http://vimeo.com/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Facebook Sharer',
                 'url' => 'http://www.facebook.com/sharer.php',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Youtube',
                 'url' => 'http://www.youtube.com/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Googel support',
                 'url' => 'http://support.google.com/chrome/answer/95647?hl=es',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Instagram',
                 'url' => 'http://instagram.com/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Discuz',
                 'url' => 'http://www.discuz.net/forum.php',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Google calendar',
                 'url' => 'http://calendar.google.com/calendar/render',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Wikipedia',
                 'url' => 'http://www.wikipedia.org/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Google Analytics',
                 'url' => 'http://www.google.com/analytics/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'nazwa.pl',
                 'url' => 'http://www.nazwa.pl/',
                 'published' => true,
+                'sectionId' => 1,
             ],
             [
                 'name' => 'Apache',
                 'url' => 'http://www.apache.org/',
                 'published' => true,
+                'sectionId' => 4,
             ],
             [
                 'name' => 'Nginx',
                 'url' => 'http://www.nginx.com/',
                 'published' => true,
+                'sectionId' => 4,
             ],
             [
                 'name' => 'Microsoft.com',
                 'url' => 'http://windows.microsoft.com/en-US/internet-explorer/products/ie/home',
                 'published' => true,
+                'sectionId' => 3,
             ],
             [
                 'name' => 'Dropbox',
                 'url' => 'http://www.dropbox.com/',
                 'published' => false,
+                'sectionId' => 3,
             ],
             [
                 'name' => 'Google [DE]',
                 'url' => 'http://www.google.de/',
                 'published' => true,
+                'sectionId' => 3,
             ],
         ];
 
@@ -132,6 +150,7 @@ class URLServiceTest extends BaseURLServiceTest
             $struct = $contentService->newContentCreateStruct($contentType, 'eng-GB');
             $struct->setField('name', $data['name']);
             $struct->setField('url', $data['url']);
+            $struct->sectionId = $data['sectionId'];
 
             $location = $locationService->newLocationCreateStruct($parentLocationId);
 
@@ -246,6 +265,49 @@ class URLServiceTest extends BaseURLServiceTest
 
         $query = new URLQuery();
         $query->filter = new Criterion\Validity(true);
+
+        $this->doTestFindUrls($query, $expectedUrls);
+    }
+
+    /**
+     * Test for URLService::findUrls() method.
+     *
+     * @see \eZ\Publish\Core\Repository\URLService::findUrls()
+     * @depends eZ\Publish\API\Repository\Tests\URLServiceTest::testFindUrls
+     */
+    public function testFindUrlsUsingSectionCriterion()
+    {
+        $expectedUrls = [
+            'http://windows.microsoft.com/en-US/internet-explorer/products/ie/home',
+            'http://www.dropbox.com/',
+            'http://www.google.de/',
+        ];
+
+        $query = new URLQuery();
+        $query->filter = new Criterion\Section(3);
+
+        $this->doTestFindUrls($query, $expectedUrls);
+    }
+
+    /**
+     * Test for URLService::findUrls() method.
+     *
+     * @see \eZ\Publish\Core\Repository\URLService::findUrls()
+     * @depends eZ\Publish\API\Repository\Tests\URLServiceTest::testFindUrls
+     */
+    public function testFindUrlsUsingSectionAndValidityCriterionValid()
+    {
+        $expectedUrls = [
+            'http://windows.microsoft.com/en-US/internet-explorer/products/ie/home',
+            'http://www.dropbox.com/',
+            'http://www.google.de/'
+        ];
+
+        $query = new URLQuery();
+        $query->filter = new Criterion\LogicalAnd([
+            new Criterion\Section(3),
+            new Criterion\Validity(true)
+        ]);
 
         $this->doTestFindUrls($query, $expectedUrls);
     }

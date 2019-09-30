@@ -7,12 +7,11 @@
 namespace eZ\Publish\Core\Persistence\Legacy\URL\Query\CriterionHandler;
 
 use eZ\Publish\API\Repository\Values\URL\Query\Criterion;
-use eZ\Publish\Core\Persistence\Legacy\URL\Query\CriteriaConverter;
-use eZ\Publish\Core\Persistence\Legacy\URL\Query\CriterionHandler;
 use eZ\Publish\Core\Persistence\Database\SelectQuery;
+use eZ\Publish\Core\Persistence\Legacy\URL\Query\CriteriaConverter;
 use PDO;
 
-class VisibleOnly implements CriterionHandler
+class VisibleOnly extends Base
 {
     /**
      * {@inheritdoc}
@@ -27,43 +26,26 @@ class VisibleOnly implements CriterionHandler
      */
     public function handle(CriteriaConverter $converter, SelectQuery $query, Criterion $criterion)
     {
-        return $query->expr->in('ezurl.id', $this->getVisibleOnlySubQuery($query));
-    }
+        $this->joinObjectLink($query);
+        $this->joinObjectAttribute($query);
 
-    /**
-     * Generate query that selects ids of visible URLs.
-     *
-     * @param \eZ\Publish\Core\Persistence\Database\SelectQuery $query
-     * @return \eZ\Publish\Core\Persistence\Database\SelectQuery
-     */
-    protected function getVisibleOnlySubQuery(SelectQuery $query)
-    {
-        // TODO: The following query requires optimization
-        $subSelect = $query->subSelect();
-        $subSelect
-            ->selectDistinct('ezurl_object_link.url_id')
-            ->from('ezurl_object_link')
-            ->innerJoin(
-                'ezcontentobject_attribute',
-                $query->expr->lAnd(
-                    $query->expr->eq('ezurl_object_link.contentobject_attribute_id', 'ezcontentobject_attribute.id'),
-                    $query->expr->eq('ezurl_object_link.contentobject_attribute_version', 'ezcontentobject_attribute.version')
-                )
-            )
-            ->innerJoin(
-                'ezcontentobject_tree',
-                $query->expr->lAnd(
-                    $query->expr->eq('ezcontentobject_tree.contentobject_id', 'ezcontentobject_attribute.contentobject_id'),
-                    $query->expr->eq('ezcontentobject_tree.contentobject_version', 'ezcontentobject_attribute.version')
-                )
-            )
-            ->where(
+        $currentQuery = $query->getQuery();
+        if (!strpos($currentQuery, 'INNER JOIN ezcontentobject_tree')) {
+            $query->innerJoin('ezcontentobject_tree', $query->expr->lAnd(
                 $query->expr->eq(
-                    'ezcontentobject_tree.is_invisible',
-                    $query->bindValue(0, null, PDO::PARAM_INT)
+                    'ezcontentobject_tree.contentobject_id',
+                    'ezcontentobject_attribute.contentobject_id'
+                ),
+                $query->expr->eq(
+                    'ezcontentobject_tree.contentobject_version',
+                    'ezcontentobject_attribute.version'
                 )
-            );
+            ));
+        }
 
-        return $subSelect;
+        return $query->expr->eq(
+            'ezcontentobject_tree.is_invisible',
+            $query->bindValue(0, null, PDO::PARAM_INT)
+        );
     }
 }
